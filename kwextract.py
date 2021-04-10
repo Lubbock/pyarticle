@@ -1,17 +1,20 @@
 # -*- coding:UTF-8 -*-
-
+import math
 import multiprocessing
 # '''文章关键字抽取'''
 import os
 from time import time
-import pandas as pd
 
 import gensim
 import jieba.posseg as pseg
 from collections import Counter
 import jieba
+from jieba.analyse import tfidf
 from pyecharts import options as opts
 from pyecharts.charts import WordCloud
+from gensim import corpora
+from gensim import models
+import pandas as pd
 
 rmcx = ['v', 'vd', 'vn', 'vshi', 'vyou', 'vf', 'vx', 'vi', 'vg',
         'vl', 'a', 'ad', 'an', 'ag', 'al', 'z', 'r', 'rr', 'rz', 'rzt',
@@ -70,7 +73,7 @@ def stopwordslist():
     return stopwords
 
 
-if __name__ == '__main__':
+def k01():
     begin = time()
     stopwords = stopwordslist()
     sentences = MySentences("./resource/a1")
@@ -111,3 +114,64 @@ if __name__ == '__main__':
     # dictionary = corpora.Dictionary(texts)
     # corpus = [dictionary.doc2bow(text) for text in texts]
     # tfidf = models.TfidfModel(corpus)
+
+
+# word可以通过count得到，count可以通过countlist得到
+
+# count[word]可以得到每个单词的词频， sum(count.values())得到整个句子的单词总数
+def gtf(word, count):
+    return count[word] / sum(count.values())
+
+
+# 统计的是含有该单词的句子数
+def gn_containing(word, article):
+    return sum(1 for sentence in article if word in sentence)
+
+
+# len(count_list)是指句子的总数，n_containing(word, count_list)是指含有该单词的句子的总数，加1是为了防止分母为0
+def gidf(word, count_list):
+    return math.log(len(count_list) / (1 + gn_containing(word, count_list)))
+
+
+# 将tf和idf相乘
+def gtfidf(word, count, count_list):
+    f = gidf(word, count_list)
+    return gtf(word, count) * f
+
+
+if __name__ == '__main__':
+    begin = time()
+    stopwords = stopwordslist()
+    article = []
+    sentences = MySentences("./resource/a1")
+    wordsCounter = Counter()
+    for s in sentences:
+        wp = []
+        article.append(s)
+        for word in s:
+            if word not in stopwords:
+                wp.append(word)
+        wordsCounter.update(wp)
+    wd = dict(wordsCounter)
+    t1 = pd.DataFrame(columns=["kw", "count", "tfidf"])
+    t1['kw'] = list(wd.keys())
+    t1['count'] = list(wd.values())
+    g = []
+    for word in wd:
+        g.append(gtfidf(word, wordsCounter, article))
+    t1['tfidf'] = g
+    t1 = t1.sort_values(by=['tfidf'], ascending=[False])
+    t1 = t1.head(20)
+    subjects = {}
+    for index, row in t1.iterrows():
+        print("文章主题 %s %s" % (row['kw'],row['count']))
+        subjects[row['kw']] = row['count']
+    # del t1['tfidf']
+    wordsCounter = Counter(subjects)
+    wordcloud = WordCloud()
+    wordslist = wordsCounter.most_common(1000)
+    wordcloud.add('', wordslist, shape='star')
+    wordcloud.render()
+    # temp = t1.head(300)
+    # del temp['tfidf']
+    print(t1)
